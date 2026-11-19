@@ -211,7 +211,7 @@ Use `_Build/linux` instead of `_Build/windows` for a Linux build.
 
 ### Visual Studio Code
 
-A ready-made Visual Studio Code setup is included in [`.vscode`](.vscode). It configures CMake
+A ready-made Visual Studio Code setup is included in [`.vscode`](../.vscode). It configures CMake
 Tools to build the project with Ninja and `clang-cl` and provides launch profiles for both
 `kyty_launcher.exe` and `kyty_emulator.exe`. It is Windows-only: VS Code settings cannot select a
 compiler per platform, so on Linux configure from the command line as shown above.
@@ -219,9 +219,9 @@ compiler per platform, so on Linux configure from the command line as shown abov
 Before using it:
 
 1. Install the **CMake Tools** and **C/C++** extensions in Visual Studio Code.
-2. Update `CMAKE_PREFIX_PATH` in [`.vscode/settings.json`](.vscode/settings.json) to point to your
+2. Update `CMAKE_PREFIX_PATH` in [`.vscode/settings.json`](../.vscode/settings.json) to point to your
    Qt 6 MSVC installation.
-3. Update the `--game` path in [`.vscode/launch.json`](.vscode/launch.json) for the
+3. Update the `--game` path in [`.vscode/launch.json`](../.vscode/launch.json) for the
    **Debug kyty_emulator** profile.
 4. Open the repository in an x64 Visual Studio developer environment, configure the CMake project,
    and select a launch profile from **Run and Debug**.

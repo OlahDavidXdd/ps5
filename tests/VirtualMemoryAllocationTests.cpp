@@ -3804,6 +3804,10 @@ struct AmmCommandBuffer {
 		            header.data(), data.data(), sizeof(data)),
 		        "set AMM command buffer");
 	}
+	~AmmCommandBuffer() {
+		// Stack addresses can be reused by the next case; remove header and backing aliases.
+		Find<int(KYTY_SYSV_ABI*)(void*)>("GuchCTefuZw")(header.data());
+	}
 	template <class Function>
 	Function Find(const char* nid) {
 		const auto* symbol = symbols.FindByNid(nid, Loader::SymbolType::Func);
