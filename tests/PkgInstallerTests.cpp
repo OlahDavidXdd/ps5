@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <cstdio>
 #include <cstdlib>
 
@@ -147,6 +148,39 @@ int main(int argc, char **argv) {
 		  "install game with spaces and custom passcode");
 	Check(QFileInfo(source).size() == 15 && clean(),
 		  "preserve original and clean nested staging files");
+	const auto quotedLibrary = temporary.filePath("quoted library");
+	Check(QDir().mkdir(quotedLibrary), "create quoted-path library fixture");
+	const auto quotedSource = package("backup [test]");
+	const auto quote = [](const QString &path) {
+		return QStringLiteral("\"") + path + QStringLiteral("\"");
+	};
+	const auto quoted = Run(quote(helper), quote(quotedSource), quote(quotedLibrary));
+	Check(quoted.error.isEmpty() &&
+			  QFileInfo(QDir(quoted.installed).filePath("eboot.bin")).isFile(),
+		  "accept Windows Copy as path quotes in all path fields");
+	const auto uriLibrary = temporary.filePath(QString::fromUtf8("URL library 資料"));
+	Check(QDir().mkdir(uriLibrary), "create file URL library fixture");
+	const auto uriSource = package("file URL game");
+	const auto uri = Run(helper, QUrl::fromLocalFile(uriSource).toString(QUrl::FullyEncoded),
+						 QUrl::fromLocalFile(uriLibrary).toString(QUrl::FullyEncoded));
+	Check(uri.error.isEmpty() && !uri.installed.isEmpty(),
+		  "accept local file URLs and Unicode paths");
+	Check(PkgInstaller::NormalizePathInput(QString(QChar(0x202a)) + quote(source) +
+										   QChar(0x202c)) == QFileInfo(source).absoluteFilePath(),
+		  "handle copied direction marks around quoted Windows paths");
+#ifndef _WIN32
+	const auto literalQuotes = package("literal \"quoted\" filename");
+	Check(PkgInstaller::NormalizePathInput(literalQuotes) == literalQuotes,
+		  "preserve real filenames containing quotes");
+#endif
+	const auto missingFile = temporary.filePath("absent.pkg");
+	const auto badSource = Run(helper, quote(missingFile), library);
+	Check(badSource.error.contains(missingFile) && !badSource.error.contains("games folder"),
+		  "identify the inaccessible PKG rather than blaming both fields");
+	const auto missingFolder = temporary.filePath("absent folder");
+	const auto badFolder = Run(helper, source, quote(missingFolder));
+	Check(badFolder.error.contains(missingFolder) && badFolder.error.contains("games folder"),
+		  "identify the inaccessible games folder");
 	const auto collision = Run(helper, source, library);
 	Check(collision.installed.isEmpty() && !collision.error.isEmpty(),
 		  "never overwrite installed game");

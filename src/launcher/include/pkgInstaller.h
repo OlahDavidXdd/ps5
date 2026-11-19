@@ -13,6 +13,7 @@ class PkgInstaller : public QObject {
   public:
 	explicit PkgInstaller(QString helper, QObject *parent = nullptr);
 	~PkgInstaller() override;
+	[[nodiscard]] static QString NormalizePathInput(const QString &input);
 	void Start(const QString &package, const QString &library, const QString &passcode = {});
 	void Cancel();
 	[[nodiscard]] bool WasCanceled() const { return m_canceled; }

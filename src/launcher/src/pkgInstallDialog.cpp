@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSettings>
@@ -76,8 +77,10 @@ PkgInstallDialog::PkgInstallDialog(const QString &library, QWidget *parent) : QD
 	m_progress = new QProgressBar(this);
 	m_progress->setRange(0, 100);
 	m_progress->setValue(0);
+	m_progress->hide();
 	layout->addWidget(m_progress);
-	m_status = new QLabel(this);
+	m_status = new QLabel(tr("Choose a PKG and a games folder, then click Install."), this);
+	m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
 	m_status->setWordWrap(true);
 	m_status->setTextFormat(Qt::PlainText);
 	layout->addWidget(m_status);
@@ -89,20 +92,26 @@ PkgInstallDialog::PkgInstallDialog(const QString &library, QWidget *parent) : QD
 }
 
 QString PkgInstallDialog::LibraryDirectory() const {
-	return QFileInfo(m_library->text()).absoluteFilePath();
+	return PkgInstaller::NormalizePathInput(m_library->text());
 }
 
 void PkgInstallDialog::Install() {
 	if (m_running)
 		return;
+	m_package->setText(PkgInstaller::NormalizePathInput(m_package->text()));
+	m_library->setText(PkgInstaller::NormalizePathInput(m_library->text()));
+	m_helper->setText(PkgInstaller::NormalizePathInput(m_helper->text()));
 	m_running = true;
 	m_inputs->setEnabled(false);
 	m_install->setEnabled(false);
 	m_status->clear();
+	m_progress->show();
+	m_progress->setTextVisible(false);
 	m_progress->setRange(0, 0);
-	m_installer = new PkgInstaller(QFileInfo(m_helper->text()).absoluteFilePath(), this);
+	m_installer = new PkgInstaller(m_helper->text(), this);
 	connect(m_installer, &PkgInstaller::Progress, this,
 			[this](int percent, const QString &message) {
+				m_progress->setTextVisible(percent >= 0);
 				m_progress->setRange(0, percent < 0 ? 0 : 100);
 				if (percent >= 0)
 					m_progress->setValue(percent);
@@ -116,13 +125,25 @@ void PkgInstallDialog::Install() {
 				m_progress->setRange(0, 100);
 				m_progress->setValue(installed.isEmpty() ? 0 : 100);
 				m_status->setText(error);
+				auto *completed_installer = m_installer;
+				const bool canceled = completed_installer->WasCanceled();
+				m_installer = nullptr;
 				if (!installed.isEmpty()) {
 					QSettings().setValue(QStringLiteral("pkg_extractor"), m_helper->text());
 					accept();
-				} else if (m_installer->WasCanceled())
-					QDialog::reject();
-				m_installer->deleteLater();
-				m_installer = nullptr;
+				} else {
+					m_progress->hide();
+					if (canceled)
+						QDialog::reject();
+					else {
+						QMessageBox message(QMessageBox::Warning, tr("PKG installation failed"), {},
+											QMessageBox::Ok, this);
+						message.setTextFormat(Qt::PlainText);
+						message.setText(error);
+						message.exec();
+					}
+				}
+				completed_installer->deleteLater();
 			});
 	m_installer->Start(m_package->text(), m_library->text(), m_passcode->text());
 	m_passcode->clear();
