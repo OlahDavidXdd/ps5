@@ -193,12 +193,32 @@ void PkgInstaller::ReadOutput() {
 		} else if (type == QStringLiteral("done")) {
 			m_done = true;
 			if (m_inspecting) {
-				m_supported =
-					object.value(QStringLiteral("unpackable")).toBool() &&
-					object.value(QStringLiteral("kind")).toString() == QStringLiteral("fpkg");
-				if (!m_supported)
-					m_error = tr("Only PS5 debug/fake base packages can be installed. Retail, "
-								 "update, PS4, and metadata-only packages are unsupported.");
+				const auto kind = object.value(QStringLiteral("kind")).toString();
+				m_supported = object.value(QStringLiteral("unpackable")).toBool() &&
+							  kind == QStringLiteral("fpkg");
+				if (!m_supported) {
+					if (kind == QStringLiteral("retail"))
+						m_error =
+							tr("Detected type: retail-encrypted PS5 package. This extractor cannot "
+							   "decrypt retail packages. Use a supported PS5 debug/fake base "
+							   "package or an already-decrypted game folder.");
+					else if (kind == QStringLiteral("patch"))
+						m_error = tr("Detected type: update/patch package. Standalone update "
+									 "installation is unsupported. Select the game's PS5 "
+									 "debug/fake base package instead.");
+					else if (kind == QStringLiteral("metadata"))
+						m_error = tr("Detected type: metadata/CNT container. This extractor only "
+									 "installs finalized PS5 debug/fake base packages; it cannot "
+									 "install this container format.");
+					else if (kind == QStringLiteral("unknown") || kind.isEmpty())
+						m_error = tr("Detected type: unknown package format. The extractor does "
+									 "not recognize a supported PS5 debug/fake base package. The "
+									 "file may use another format or be incomplete.");
+					else
+						m_error =
+							tr("The extractor cannot install this package. Detected type: %1.")
+								.arg(kind.left(64));
+				}
 			}
 		} else if (type == QStringLiteral("progress") && !m_inspecting) {
 			const auto total = object.value(QStringLiteral("total")).toDouble();

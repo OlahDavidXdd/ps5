@@ -33,9 +33,11 @@ static void Json(const QJsonObject &object) {
 static int Mock(const QStringList &args) {
 	const auto mode = QFileInfo(args.at(2)).completeBaseName();
 	if (args.at(1) == QStringLiteral("info")) {
+		const bool unsupported =
+			QStringList{"retail", "patch", "metadata", "unknown"}.contains(mode);
 		Json({{"type", "done"},
-			  {"kind", mode == "retail" ? "retail" : "fpkg"},
-			  {"unpackable", mode != "retail"}});
+			  {"kind", unsupported ? mode : QStringLiteral("fpkg")},
+			  {"unpackable", !unsupported}});
 		return 0;
 	}
 	const auto output = args.at(3);
@@ -184,12 +186,16 @@ int main(int argc, char **argv) {
 	const auto collision = Run(helper, source, library);
 	Check(collision.installed.isEmpty() && !collision.error.isEmpty(),
 		  "never overwrite installed game");
-	for (const auto &mode :
-		 {"retail", "fail", "badjson", "flood", "badmetadata", "missingdone", "missinggame"}) {
+	for (const auto &mode : {"retail", "patch", "metadata", "unknown", "fail", "badjson", "flood",
+							 "badmetadata", "missingdone", "missinggame"}) {
 		const auto failed = Run(helper, package(mode), library);
 		Check(failed.installed.isEmpty() && !failed.error.isEmpty() && clean(),
 			  "reject invalid packages and clean all partial files");
 		Check(!QFileInfo::exists(QDir(library).filePath(mode)), "no failed game published");
+		if (QStringList{"retail", "patch", "metadata", "unknown"}.contains(
+				QString::fromLatin1(mode)))
+			Check(failed.error.contains(QString::fromLatin1(mode)),
+				  "report the detected package kind instead of a generic unsupported message");
 	}
 #ifndef _WIN32
 	const auto symlink = Run(helper, package("symlink"), library);
