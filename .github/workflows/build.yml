@@ -448,8 +448,8 @@ jobs:
     name: Release KytyPS5
     if: >-
       always() &&
-      github.event_name == 'push' &&
-      github.repository == 'KytyPS5/KytyPS5' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.repository == 'OlahDavidXdd/ps5' &&
       (needs.windows.result == 'success' ||
        needs.macos.result == 'success' ||
        needs.linux.result == 'success')
@@ -535,7 +535,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$RELEASE_NAME" "${assets[@]}" \
-              --generate-notes \
+              --notes "Ready-to-run packages are attached below for platforms whose builds and tests passed. Adds unencrypted ISO 9660 game loading; encrypted files and UDF-only images are unsupported. Extract the package and open the launcher. No PlayStation account is required." \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "$RELEASE_NAME"
