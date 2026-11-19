@@ -256,8 +256,11 @@ void CheckCancellation(const std::filesystem::path &path,
 
 } // namespace
 
+#include "IsoArchiveTests.h"
+
 int main() {
   TempDirectory temporary;
+  TestIsoArchive(temporary.Path());
   const auto archive_path =
       temporary.Path() / std::filesystem::path(u8"game-テスト.zar");
 

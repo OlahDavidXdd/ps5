@@ -391,9 +391,19 @@ open _Build/macos/install/KytyPS5.app  # or double-click in Finder
 ```
 
 On first launch, add one or more game folders in the global settings. The launcher searches those
-folders recursively for game directories containing `eboot.bin` and ZArchive (`.zar`) game dumps
+folders recursively for game directories containing `eboot.bin` and ZArchive (`.zar`) or ISO 9660 (`.iso`) game dumps
 whose archive root contains `eboot.bin`. Select a detected game and run it from the game list.
-ZArchive dumps are mounted read-only and streamed directly; they do not need to be extracted first.
+ZArchive and ISO 9660 dumps are mounted read-only and streamed directly; they do not need to be extracted first.
+
+No PlayStation account or PSN login is required. The optional **Emulate PSN (compatibility)**
+setting simulates sign-in locally for games that check it; it does not connect to PSN or provide
+online services.
+
+ISO support covers unencrypted ISO 9660 images with single-extent, non-interleaved files.
+Names are matched without ASCII case sensitivity and ISO version suffixes such as `;1` are removed.
+The image must contain a compatible game dump with `eboot.bin` at its root. UDF-only images,
+encrypted retail discs, PKG packages, ZIP/7z archives and games for other consoles are not supported
+by this reader. Importing a container does not change the emulator's game compatibility.
 
 Official release builds include a built-in updater. Leave **Check for updates on startup** enabled,
 or click **Check for updates**, then choose **Install Update**. The launcher downloads the package

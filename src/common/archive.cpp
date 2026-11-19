@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <condition_variable>
 #include <cstring>
+#include <array>
+#include <fstream>
 #include <mutex>
 #include <optional>
 #include <string_view>
@@ -87,12 +89,171 @@ std::shared_ptr<ArchiveReader> OpenZArchive(const std::filesystem::path& path) {
 	return reader ? std::make_shared<ZArchiveReaderBackend>(std::move(reader)) : nullptr;
 }
 
-struct ArchiveFormat {
-	std::string_view extension;
-	std::shared_ptr<ArchiveReader> (*open)(const std::filesystem::path&);
+// ISO 9660 single-extent files are streamed in place. UDF, encrypted disc images,
+// multi-extent files and interleaved files are deliberately rejected.
+class IsoArchiveReader final: public ArchiveReader {
+  public:
+	explicit IsoArchiveReader(const std::filesystem::path &path)
+		: m_stream(path, std::ios::binary) {}
+
+	bool Initialize() {
+		if (!m_stream)
+			return false;
+		m_stream.seekg(0, std::ios::end);
+		const auto end = m_stream.tellg();
+		if (end < 0)
+			return false;
+		m_size = static_cast<uint64_t>(end);
+		std::array<unsigned char, 2048> descriptor{};
+		for (uint64_t sector = 16; sector < 80; ++sector) {
+			if (!ReadAt(sector * 2048, descriptor.data(), descriptor.size()) ||
+				std::memcmp(descriptor.data() + 1, "CD001", 5) != 0 ||
+				descriptor[6] != 1)
+				return false;
+			if (descriptor[0] == 255)
+				return false;
+			if (descriptor[0] != 1)
+				continue;
+			if (descriptor[128] != 0 || descriptor[129] != 8 ||
+				descriptor[130] != 8 || descriptor[131] != 0)
+				return false;
+			Node root{};
+			if (!Decode(descriptor.data() + 156, 2048 - 156, root) ||
+				root.is_file)
+				return false;
+			m_nodes.emplace("", root);
+			return Index("", root, 0);
+		}
+		return false;
+	}
+
+	std::optional<Entry> Find(std::string_view member) override {
+		const auto it = m_nodes.find(Key(member));
+		if (it == m_nodes.end())
+			return {};
+		return Entry{it->second.offset, it->second.size, it->second.is_file};
+	}
+
+	std::vector<File::DirEntry> List(std::string_view member) override {
+		const auto it = m_children.find(Key(member));
+		return it == m_children.end() ? std::vector<File::DirEntry>{}
+									  : it->second;
+	}
+
+	uint64_t Read(uint64_t id, uint64_t offset, uint32_t size,
+				  void *data) override {
+		std::lock_guard lock(m_mutex);
+		if (id > m_size || offset > m_size - id)
+			return 0;
+		return ReadAt(id + offset, data, size) ? size : 0;
+	}
+
+  private:
+	struct Node {
+		uint64_t offset;
+		uint64_t size;
+		bool is_file;
+	};
+	static std::string Key(std::string_view name) {
+		std::string result(name);
+		for (auto &c : result)
+			if (c >= 'A' && c <= 'Z')
+				c += 'a' - 'A';
+		return result;
+	}
+	static uint32_t Little32(const unsigned char *p) {
+		return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) |
+			   (uint32_t(p[3]) << 24);
+	}
+	bool ReadAt(uint64_t offset, void *data, size_t size) {
+		if (offset > m_size || size > m_size - offset)
+			return false;
+		m_stream.clear();
+		m_stream.seekg(static_cast<std::streamoff>(offset));
+		m_stream.read(static_cast<char *>(data),
+					  static_cast<std::streamsize>(size));
+		return m_stream.good();
+	}
+	bool Decode(const unsigned char *record, size_t available,
+				Node &node) const {
+		if (available < 34 || record[0] < 34 || record[0] > available ||
+			record[32] == 0 || 33u + record[32] > record[0] || record[1] != 0 ||
+			(record[25] & 0x80) != 0 || record[26] != 0 || record[27] != 0)
+			return false;
+		node = {uint64_t(Little32(record + 2)) * 2048, Little32(record + 10),
+				(record[25] & 2) == 0};
+		return node.offset <= m_size && node.size <= m_size - node.offset;
+	}
+	bool Index(const std::string &parent, Node directory, unsigned depth) {
+		if (depth > 64 || directory.size > (uint64_t{32} << 20) ||
+			directory.size > (uint64_t{64} << 20) - m_metadata_size)
+			return false;
+		m_metadata_size += directory.size;
+		// Each directory extent may be visited once: reject cycles and aliases.
+		if (!m_directories.emplace(directory.offset, true).second)
+			return false;
+		std::vector<unsigned char> bytes(directory.size);
+		if (!ReadAt(directory.offset, bytes.data(), bytes.size()))
+			return false;
+		std::vector<std::pair<std::string, Node>> subdirs;
+		for (size_t pos = 0; pos < bytes.size();) {
+			if (bytes[pos] == 0) {
+				pos = (pos / 2048 + 1) * 2048;
+				continue;
+			}
+			const auto *record = bytes.data() + pos;
+			Node node{};
+			if (!Decode(record, std::min(bytes.size() - pos, 2048 - pos % 2048),
+						node))
+				return false;
+			pos += record[0];
+			if (record[32] == 1 && (record[33] == 0 || record[33] == 1))
+				continue;
+			std::string name(reinterpret_cast<const char *>(record + 33),
+							 record[32]);
+			if (const auto version = name.find(';');
+				version != std::string::npos)
+				name.resize(version);
+			if (node.is_file && !name.empty() && name.back() == '.')
+				name.pop_back();
+			name = Key(name);
+			if (name.empty() || name == "." || name == ".." ||
+				name.find_first_of("/\\\0", 0, 3) != std::string::npos)
+				return false;
+			const auto path = parent.empty() ? name : parent + "/" + name;
+			if (m_nodes.size() >= (1u << 20) ||
+				!m_nodes.emplace(path, node).second)
+				return false;
+			m_children[parent].push_back({name, node.is_file});
+			if (!node.is_file)
+				subdirs.emplace_back(path, node);
+		}
+		for (const auto &[path, node] : subdirs)
+			if (!Index(path, node, depth + 1))
+				return false;
+		return true;
+	}
+	std::ifstream m_stream;
+	uint64_t m_size = 0;
+	uint64_t m_metadata_size = 0;
+	std::mutex m_mutex;
+	std::unordered_map<std::string, Node> m_nodes;
+	std::unordered_map<std::string, std::vector<File::DirEntry>> m_children;
+	std::unordered_map<uint64_t, bool> m_directories;
 };
 
-constexpr ArchiveFormat Formats[] = {{".zar", OpenZArchive}};
+std::shared_ptr<ArchiveReader>
+OpenIsoArchive(const std::filesystem::path &path) {
+	auto reader = std::make_shared<IsoArchiveReader>(path);
+	return reader->Initialize() ? reader : nullptr;
+}
+
+struct ArchiveFormat {
+	std::string_view extension;
+	std::shared_ptr<ArchiveReader> (*open)(const std::filesystem::path &);
+};
+
+constexpr ArchiveFormat Formats[] = {{".zar", OpenZArchive}, {".iso", OpenIsoArchive}};
 using NativeView                  = std::basic_string_view<std::filesystem::path::value_type>;
 
 const ArchiveFormat* FindFormat(NativeView path) {
