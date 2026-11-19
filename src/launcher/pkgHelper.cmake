@@ -1,0 +1,35 @@
+# The GPL-3.0 PlayOutPs5Pkg CLI is a separate, unmodified program, not a linked library.
+# Bundle its license, complete notices, and exact corresponding source alongside it.
+option(KYTY_BUNDLE_PKG_HELPER "Bundle the independent Windows PS5 debug PKG extractor" ${WIN32})
+if(KYTY_BUNDLE_PKG_HELPER)
+    if(NOT WIN32)
+        message(FATAL_ERROR "The prebuilt PKG helper is Windows-only. Set KYTY_BUNDLE_PKG_HELPER=OFF and supply a native PlayOutPs5Pkg CLI.")
+    endif()
+    set(pkg_helper_dir "${CMAKE_CURRENT_BINARY_DIR}/pkg-helper")
+    file(MAKE_DIRECTORY "${pkg_helper_dir}")
+    function(kyty_pkg_helper_file name checksum)
+        set(destination "${pkg_helper_dir}/${name}")
+        if(EXISTS "${destination}")
+            file(SHA256 "${destination}" actual)
+            if(actual STREQUAL checksum)
+                return()
+            endif()
+        endif()
+        file(DOWNLOAD "https://github.com/jeremybris/PlayOut-PS5PKG/releases/download/v1.0.0/${name}"
+            "${destination}" EXPECTED_HASH "SHA256=${checksum}" TLS_VERIFY ON)
+    endfunction()
+    kyty_pkg_helper_file(PlayOutPs5Pkg.exe 39128c65963ca4d5aa616c460103d6c440cc614693812ee1f701c7b937be3bbd)
+    kyty_pkg_helper_file(LICENSE 3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986)
+    kyty_pkg_helper_file(LICENSES-THIRD-PARTY.txt d76ac54f8c03c0f78f7ed0a01a773d701d4143f89acd6c33f786264a4d561615)
+    kyty_pkg_helper_file(PlayOutPs5Pkg-1.0.0-source.zip e8dc92c0b14ccbb8d8782000165c2e04dd0cf3a58ce627b7d4d52076befdba1d)
+    file(WRITE "${pkg_helper_dir}/SOURCE.txt"
+        "Separate PlayOutPs5Pkg 1.0.0 executable (GPL-3.0-or-later).\nSource: https://github.com/jeremybris/PlayOut-PS5PKG/tree/d406499bbf87fa4e977e54f132e91a519314ec4c\nExact corresponding source and third-party notices are included in this directory.\n")
+    add_custom_command(TARGET launcher POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${pkg_helper_dir}" "$<TARGET_FILE_DIR:launcher>/helpers/pkg"
+        VERBATIM)
+    if(BUILD_TESTING)
+        add_test(NAME pkg_helper_version COMMAND "${pkg_helper_dir}/PlayOutPs5Pkg.exe" --version)
+        add_test(NAME pkg_helper_rejection COMMAND pkg_installer_tests --real-helper "${pkg_helper_dir}/PlayOutPs5Pkg.exe")
+    endif()
+    install(DIRECTORY "${pkg_helper_dir}/" DESTINATION helpers/pkg)
+endif()

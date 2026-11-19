@@ -17,8 +17,21 @@ The scanner finds extracted games and `.zar` or `.iso` images containing `eboot.
 No PlayStation account is required; optional PSN simulation is local and provides no online services.
 
 This version adds read-only ISO 9660 loading without extraction, including ASCII case-insensitive
-paths and ISO version suffixes. Encrypted dumps, UDF-only images, PKG packages, multi-extent and
+paths and ISO version suffixes. Encrypted retail dumps, UDF-only images, multi-extent and
 interleaved ISO files are unsupported. Importing a file does not guarantee game compatibility.
+
+## Install PKG files
+
+Click **Install PKG…**, select a PS5 debug/fake **base** package and a games folder, then click
+**Install**. Leave the package passcode blank for the default, or enter its 32-character passcode.
+The installed game appears in the library automatically. Cancellation and failed installations
+remove partial files; existing games and the original PKG are never overwritten.
+
+Windows packages include the independent [PlayOutPs5Pkg extractor](https://github.com/jeremybris/PlayOut-PS5PKG),
+its GPL-3.0 license, notices, and corresponding source in `helpers/pkg`. Other platforms require
+a separately built, compatible native PlayOutPs5Pkg executable selected in the install dialog.
+Retail-encrypted packages, updates/patches, DLC, PS4 packages, and metadata-only packages are not
+supported by this installer. Installing a package does not guarantee that its executables can run.
 
 [Build instructions](docs/building.md) · [Build status](https://github.com/OlahDavidXdd/ps5/actions/workflows/build.yml)
 

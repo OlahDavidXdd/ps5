@@ -1,3 +1,4 @@
+#include "pkgInstallDialog.h"
 #include "configurationListWidget.h"
 
 #include "additionalContentDialog.h"
@@ -198,6 +199,23 @@ ConfigurationListWidget::ConfigurationListWidget(QWidget* parent)
 	m_compatibility = new CompatibilityDatabase(
 	    QCoreApplication::arguments().contains(QStringLiteral("--local")), this);
 	m_ui->setupUi(this);
+
+	auto* install_pkg = new QToolButton(this);
+	install_pkg->setText(tr("Install PKG…"));
+	install_pkg->setToolButtonStyle(Qt::ToolButtonTextOnly);
+	install_pkg->setMinimumHeight(36);
+	install_pkg->setObjectName(QStringLiteral("installPkgButton"));
+	install_pkg->setToolTip(tr("Install a PS5 debug/fake base package"));
+	m_ui->horizontalLayout->insertWidget(0, install_pkg);
+	connect(install_pkg, &QToolButton::clicked, this, [this] {
+		PkgInstallDialog dialog(m_game_dirs.isEmpty() ? QString() : m_game_dirs.front(), this);
+		if (dialog.exec() == QDialog::Accepted) {
+			m_game_dirs.append(dialog.LibraryDirectory());
+			m_game_dirs = NormalizeGameDirectories(m_game_dirs);
+			WriteSettings();
+			ScanGameDirectory();
+		}
+	});
 
 	m_ui->refresh_action->setShortcuts(QKeySequence::Refresh);
 	m_ui->refresh_button->setDefaultAction(m_ui->refresh_action);

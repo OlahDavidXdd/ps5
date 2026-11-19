@@ -70,7 +70,7 @@ jobs:
             esac
           done
           test "${#assets[@]}" -gt 0
-          notes="Download a platform package from Assets, extract it, and open the launcher. Only platforms whose builds and tests passed are attached. Adds unencrypted ISO 9660 loading without a PlayStation account; encrypted files remain unsupported."
+          notes="Download a platform package from Assets, extract it, and open the launcher. Only platforms whose builds and tests passed are attached. Adds ISO 9660 loading and PS5 debug/fake base PKG installation without a PlayStation account. Windows includes the extractor; other platforms need a compatible native helper. Retail-encrypted packages and updates are unsupported."
           if gh release view "$release_name" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$release_name" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
           else

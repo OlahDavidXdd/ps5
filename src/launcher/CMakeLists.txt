@@ -230,3 +230,19 @@ list(APPEND inc_headers
 include_what_you_use_with_mappings(launcher "${inc_headers}" "${iwyu_maps}")
 
 clang_tidy_check(launcher "" "${tidy_dirs}" "${inc_headers}")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/pkgHelper.cmake")
+
+add_executable(pkg_installer_tests EXCLUDE_FROM_ALL
+    "${KYTY_TESTS_DIR}/PkgInstallerTests.cpp"
+    src/pkgInstaller.cpp include/pkgInstaller.h)
+target_include_directories(pkg_installer_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(pkg_installer_tests Qt6::Core)
+set_target_properties(pkg_installer_tests PROPERTIES AUTOMOC ON)
+if(BUILD_TESTING)
+    add_test(NAME pkg_installer COMMAND pkg_installer_tests)
+endif()
+
+if(TARGET kyty_tests)
+    add_dependencies(kyty_tests pkg_installer_tests)
+endif()
