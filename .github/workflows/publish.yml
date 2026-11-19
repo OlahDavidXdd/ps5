@@ -1,0 +1,79 @@
+name: Publish tested build downloads
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Build and Release KytyPS5 run ID to publish
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-build-downloads
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'OlahDavidXdd/ps5'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN_ID: ${{ inputs.run_id }}
+    steps:
+      - name: Download and publish successful platform builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID" > run.json
+          jq -e --arg repo "$GITHUB_REPOSITORY" '
+            .head_repository.full_name == $repo and
+            .name == "Build and Release KytyPS5" and
+            (.event == "push" or .event == "workflow_dispatch")
+          ' run.json > /dev/null
+          source_sha=$(jq -r '.head_sha' run.json)
+          build_date=$(jq -r '.created_at[:10]' run.json)
+          release_name="KytyPS5-$build_date-${source_sha:0:7}"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "success") | .name' > passed-jobs.txt
+          assets=()
+          for platform in Windows macOS Linux; do
+            if ! grep -Fxq "Build KytyPS5 ($platform)" passed-jobs.txt; then
+              continue
+            fi
+            case "$platform" in
+              Windows) artifact=KytyPS5-Windows-x64 ;;
+              macOS) artifact=KytyPS5-macOS-x86_64 ;;
+              Linux) artifact=KytyPS5-Linux-x86_64 ;;
+            esac
+            gh run download "$BUILD_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+              --name "$artifact" --dir "artifacts/$platform"
+            case "$platform" in
+              Windows)
+                test -f artifacts/Windows/kyty_launcher.exe
+                (cd artifacts/Windows && zip -qr "$GITHUB_WORKSPACE/$release_name-Windows-x64.zip" .)
+                assets+=("$release_name-Windows-x64.zip")
+                ;;
+              macOS)
+                cp artifacts/macOS/KytyPS5-macOS-x86_64.zip "$release_name-macOS-x86_64.zip"
+                assets+=("$release_name-macOS-x86_64.zip")
+                ;;
+              Linux)
+                chmod a+x artifacts/Linux/kyty_launcher artifacts/Linux/kyty_emulator artifacts/Linux/kyty_updater
+                tar -C artifacts/Linux -czf "$release_name-Linux-x86_64.tar.gz" .
+                assets+=("$release_name-Linux-x86_64.tar.gz")
+                ;;
+            esac
+          done
+          test "${#assets[@]}" -gt 0
+          notes="Download a platform package from Assets, extract it, and open the launcher. Only platforms whose builds and tests passed are attached. Adds unencrypted ISO 9660 loading without a PlayStation account; encrypted files remain unsupported."
+          if gh release view "$release_name" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$release_name" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$release_name" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
+              --target "$source_sha" --title "PS5 Emulator — ISO support" --notes "$notes" --latest
+          fi
