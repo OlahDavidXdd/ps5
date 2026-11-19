@@ -179,6 +179,9 @@ int main(int argc, char **argv) {
 	}
 	const auto invalidPasscode = Run(helper, package("passcode"), library, "short");
 	Check(!invalidPasscode.error.isEmpty() && clean(), "validate passcode before extraction");
+	const auto missingLibrary = Run(helper, package("no-library"), {});
+	Check(!missingLibrary.error.isEmpty() && missingLibrary.installed.isEmpty(),
+		  "require an explicit games folder");
 	const auto missing = Run(temporary.filePath("missing-helper"), package("missing"), library);
 	Check(!missing.error.isEmpty() && clean(), "missing extractor fails cleanly");
 	std::puts("PkgInstallerTests: passed");

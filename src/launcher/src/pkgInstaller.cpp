@@ -51,7 +51,7 @@ void PkgInstaller::Start(const QString &package, const QString &library, const Q
 		Complete({}, tr("Select a PlayOutPs5Pkg extractor executable first."));
 		return;
 	}
-	if (!QFileInfo(package).isFile() || !QDir(library).exists()) {
+	if (library.trimmed().isEmpty() || !QFileInfo(package).isFile() || !QDir(library).exists()) {
 		Complete({}, tr("Select an existing PKG file and games folder."));
 		return;
 	}

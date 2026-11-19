@@ -43,6 +43,8 @@ PkgInstallDialog::PkgInstallDialog(const QString &library, QWidget *parent) : QD
 								 ? bundled
 								 : QSettings().value(QStringLiteral("pkg_extractor")).toString(),
 							 m_inputs);
+	if (QFileInfo::exists(bundled))
+		m_helper->hide();
 	const auto addBrowse = [this, form](const QString &title, QLineEdit *edit, bool directory,
 										const QString &filter) {
 		auto *row = new QWidget(m_inputs);
